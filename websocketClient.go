@@ -6,8 +6,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
-	deepchWebrtc "github.com/deepch/vdk/format/webrtcv3"
 	"github.com/gorilla/websocket"
 	webrtc "github.com/pion/webrtc/v3"
 
@@ -21,6 +19,12 @@ import (
 
 //wss://demo.piesocket.com/v3/channel_1?api_key=oCdCMcMPQpbvNjUIzqtvF1d2X2okWpDQj4AwARJuAgtjhzKxVEjQU6IdCjwm&notify_self
 
+// SessionDescription is used to expose local and remote session descriptions.
+type ResponseAnswerStruct struct {
+	Type    string `json:"type"`
+	Payload string `json:"payload"`
+}
+
 func websocketClient() {
 
 	var clientUrl = Config.GetWSClientUrl()
@@ -33,111 +37,103 @@ func websocketClient() {
 		log.Fatal("dial:", err)
 	}
 	defer ws.Close()
-
-	var codecs []JCodec
-	codecs = append(codecs, JCodec{Type: "video"})
-
-	config := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			{
-				URLs: []string{"stun:stun.l.google.com:19302"},
-			},
-		},
-	}
-
-	muxerWebRTC := deepchWebrtc.NewMuxer(deepchWebrtc.Options{ICEServers: Config.GetICEServers(), ICEUsername: Config.GetICEUsername(), ICECredential: Config.GetICECredential(), PortMin: Config.GetWebRTCPortMin(), PortMax: Config.GetWebRTCPortMax()})
-
-	peerConnection, err := muxerWebRTC.NewPeerConnection(config)
-	if err != nil {
-		panic(err)
-	}
-
-	peerConnection.OnICECandidate(func(c *webrtc.ICECandidate) {
-		log.Println("Got Ice Candidate")
-		if c == nil {
-			return
-		}
-
-		outbound, marshalErr := json.Marshal(c.ToJSON())
-		if marshalErr != nil {
-			panic(marshalErr)
-		}
-
-		if err = ws.WriteMessage(websocket.TextMessage, outbound); err != nil {
-			panic(err)
-		}
-	})
-
-	// Set the handler for ICE connection state
-	// This will notify you when the peer has connected/disconnected
-	peerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
-		fmt.Printf("ICE Connection State has changed: %s\n", connectionState.String())
-	})
-
-	// Send the current time via a DataChannel to the remote peer every 3 seconds
-	peerConnection.OnDataChannel(func(d *webrtc.DataChannel) {
-		d.OnOpen(func() {
-			for range time.Tick(time.Second * 3) {
-				if err = d.SendText(time.Now().String()); err != nil {
-					panic(err)
-				}
-			}
-		})
-	})
-
+	muxerWebRTC := NewLMuxer(Options{ICEServers: Config.GetICEServers(), ICEUsername: Config.GetICEUsername(), ICECredential: Config.GetICECredential(), PortMin: Config.GetWebRTCPortMin(), PortMax: Config.GetWebRTCPortMax()})
 	done := make(chan struct{})
 
+	go func() {
+		defer close(done)
+		for {
+			// Read each inbound WebSocket Message
+			_, message, err := ws.ReadMessage()
+			if err != nil {
+				log.Println("read:", err)
+				return
+			}
+			// Unmarshal each inbound WebSocket message
+			var (
+				candidate webrtc.ICECandidateInit
+				offer     webrtc.SessionDescription
+			)
+
+			switch {
+
+			// Attempt to unmarshal as a SessionDescription. If the SDP field is empty
+			// assume it is not one.
+			case json.Unmarshal(message, &offer) == nil && offer.SDP != "" && offer.Type == webrtc.SDPTypeOffer:
+				log.Println("Received offer")
+				codecs := Config.coGe("H264_AAC")
+				answer, err := muxerWebRTC.WriteHeader(codecs, offer.SDP)
+
+				muxerWebRTC.pc.OnICECandidate(func(c *webrtc.ICECandidate) {
+					log.Println("Generated ICE Candidate")
+					if c == nil {
+						return
+					}
+					outbound, marshalErr := json.Marshal(c.ToJSON())
+					if marshalErr != nil {
+						panic(marshalErr)
+					}
+					if err = ws.WriteMessage(websocket.TextMessage, outbound); err != nil {
+						panic(err)
+					}
+				})
+
+				if err != nil {
+					log.Println("Muxer WriteHeader", err)
+					return
+				}
+				outbound, marshalErr := json.Marshal(ResponseAnswerStruct{
+					Type:    "answer",
+					Payload: string(answer),
+				})
+				if marshalErr != nil {
+					panic(marshalErr)
+				}
+				if err = ws.WriteMessage(websocket.TextMessage, outbound); err != nil {
+					panic(err)
+				}
+				go func() {
+					_, ch := Config.clAd("H264_AAC")
+					defer muxerWebRTC.Close()
+					var videoStart bool
+					noVideo := time.NewTimer(10 * time.Second)
+					for {
+						select {
+						case <-noVideo.C:
+							log.Println("noVideo")
+							return
+						case pck := <-ch:
+							if pck.IsKeyFrame {
+								noVideo.Reset(10 * time.Second)
+								videoStart = true
+							}
+							if !videoStart {
+								continue
+							}
+							err = muxerWebRTC.WritePacket(pck)
+							if err != nil {
+								log.Println("WritePacket", err)
+								return
+							}
+						}
+					}
+				}()
+
+			case json.Unmarshal(message, &candidate) == nil && candidate.Candidate != "":
+				log.Println(candidate)
+				if err = muxerWebRTC.pc.AddICECandidate(candidate); err != nil {
+					panic(err)
+				}
+
+			default:
+				log.Printf("GOT:: %s", message)
+				// panic("Unknown message")
+			}
+
+		}
+	}()
+
 	//buf := make([]byte, 1500)
-	for {
-		// Read each inbound WebSocket Message
-		_, message, err := ws.ReadMessage()
-		if err != nil {
-			log.Println("read:", err)
-			return
-		}
-		// Unmarshal each inbound WebSocket message
-		var (
-			candidate webrtc.ICECandidateInit
-			offer     webrtc.SessionDescription
-		)
-
-		switch {
-
-		// Attempt to unmarshal as a SessionDescription. If the SDP field is empty
-		// assume it is not one.
-		case json.Unmarshal(message, &offer) == nil && offer.SDP != "":
-			if err = peerConnection.SetRemoteDescription(offer); err != nil {
-				panic(err)
-			}
-
-			answer, answerErr := peerConnection.CreateAnswer(nil)
-			if answerErr != nil {
-				panic(answerErr)
-			}
-
-			if err = peerConnection.SetLocalDescription(answer); err != nil {
-				panic(err)
-			}
-
-			outbound, marshalErr := json.Marshal(answer)
-			if marshalErr != nil {
-				panic(marshalErr)
-			}
-
-			if err = ws.WriteMessage(websocket.TextMessage, outbound); err != nil {
-				panic(err)
-			}
-		// Attempt to unmarshal as a ICECandidateInit. If the candidate field is empty
-		// assume it is not one.
-		case json.Unmarshal(message, &candidate) == nil && candidate.Candidate != "":
-			if err = peerConnection.AddICECandidate(candidate); err != nil {
-				panic(err)
-			}
-		default:
-			log.Printf("GOT:: %s", message)
-			// panic("Unknown message")
-		}
-	}
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()

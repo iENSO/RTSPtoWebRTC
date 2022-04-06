@@ -89,10 +89,13 @@ func (element *ConfigST) GetWSClientUrl() string {
 func (element *ConfigST) HasViewer(uuid string) bool {
 	element.mutex.Lock()
 	defer element.mutex.Unlock()
-	if tmp, ok := element.Streams[uuid]; ok && len(tmp.Cl) > 0 {
-		return true
-	}
-	return false
+	return true
+	//if tmp, ok := element.Streams[uuid]; ok && len(tmp.Cl) > 0 {
+	//	return true
+	//}
+	//
+	//
+	//return false
 }
 
 func (element *ConfigST) GetICEServers() []string {

@@ -23,7 +23,7 @@ func serveHTTP() {
 
 	router := gin.Default()
 	router.Use(CORSMiddleware())
-	
+
 	if _, err := os.Stat("./web"); !os.IsNotExist(err) {
 		router.LoadHTMLGlob("web/templates/*")
 		router.GET("/", HTTPAPIServerIndex)
@@ -115,6 +115,7 @@ func HTTPAPIServerStreamWebRTC(c *gin.Context) {
 		AudioOnly = true
 	}
 	muxerWebRTC := webrtc.NewMuxer(webrtc.Options{ICEServers: Config.GetICEServers(), ICEUsername: Config.GetICEUsername(), ICECredential: Config.GetICECredential(), PortMin: Config.GetWebRTCPortMin(), PortMax: Config.GetWebRTCPortMax()})
+
 	answer, err := muxerWebRTC.WriteHeader(codecs, c.PostForm("data"))
 	if err != nil {
 		log.Println("WriteHeader", err)
@@ -177,7 +178,7 @@ type Response struct {
 }
 
 type ResponseError struct {
-	Error  string   `json:"error"`
+	Error string `json:"error"`
 }
 
 func HTTPAPIServerStreamWebRTC2(c *gin.Context) {
