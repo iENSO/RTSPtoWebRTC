@@ -1,4 +1,8 @@
 {
+  "websocket": {
+    "client__demo_url": "wss://demo.piesocket.com/v3/channel_1?api_key=oCdCMcMPQpbvNjUIzqtvF1d2X2okWpDQj4AwARJuAgtjhzKxVEjQU6IdCjwm&notify_self",
+    "client_url": "wss://ienso.ienso-dev.com/api/signaling?accessToken=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InhxMDM1YmV4Y28zT0tfQVhHQm4wOXpjcXJuMXVNcnNQZGxqMlNHdlI4cWMifQ.eyJzaWQiOiJjZDVkZTVlNC02ZmU1LTQxYmYtYjVlMy1iNTVlNzQ3YWRlZjAiLCJpYXQiOjE2NDkyNjUyNzcsImV4cCI6MTY0OTg3MDA3NywiYXVkIjpbXSwiaXNzIjoiZGV2aWNlLXNpZ25hbGluZy1hdXRob3JpdHkifQ.bmx5qY5NzritAYHPVuMSBTEqSZ2SdNb2lsuRllhEAnupDGZ8wtOK6_YR51mBSgeJeEkpMCEKdLO6BBYGTpu03o1_FgZjkircEPB7TqsSNJFAjguTWWmk9bom_tAmsJ2L8Giy_K-r1uANMjAj09zHTiKe-0U9_fta2f7_BpTlUC3UP2cHAc5rAykd7qP-9uDuGEoYDDHcCBIjGbk10dXWpQ5NWle9ibcnXftonVSf1iUc-k67nSiZGsUPWluskQEJgKPly2yJqwUqJGuxzh9eQO2dJkvUUZV6Toub8GfrC2MxadqxBg-WAI0l0BQS-pe6h7rBLAKL8-_XwGo2yRFQXw"
+  },
   "server": {
     "http_port": ":8083",
     "ice_servers": ["stun:stun.l.google.com:19302"]

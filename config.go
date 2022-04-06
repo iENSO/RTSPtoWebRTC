@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/deepch/vdk/av"
+	"github.com/deepch/vdk/codec/h264parser"
 	"io/ioutil"
 	"log"
 	"sync"
 	"time"
-
-	"github.com/deepch/vdk/codec/h264parser"
-
-	"github.com/deepch/vdk/av"
 )
 
 //Config global
@@ -20,10 +18,17 @@ var Config = loadConfig()
 
 //ConfigST struct
 type ConfigST struct {
-	mutex   sync.RWMutex
-	Server  ServerST            `json:"server"`
-	Streams map[string]StreamST `json:"streams"`
+	mutex     sync.RWMutex
+	Server    ServerST            `json:"server"`
+	Websocket WebsocketST         `json:"websocket"`
+	Streams   map[string]StreamST `json:"streams"`
 	LastError error
+}
+
+//Websocket struct
+//ServerST struct
+type WebsocketST struct {
+	WSClientUrl string `json:"client_url"`
 }
 
 //ServerST struct
@@ -73,6 +78,12 @@ func (element *ConfigST) RunUnlock(uuid string) {
 			element.Streams[uuid] = tmp
 		}
 	}
+}
+
+func (element *ConfigST) GetWSClientUrl() string {
+	element.mutex.Lock()
+	defer element.mutex.Unlock()
+	return element.Websocket.WSClientUrl
 }
 
 func (element *ConfigST) HasViewer(uuid string) bool {

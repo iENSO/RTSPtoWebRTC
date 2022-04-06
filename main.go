@@ -8,6 +8,7 @@ import (
 )
 
 func main() {
+	go websocketClient()
 	go serveHTTP()
 	go serveStreams()
 	sigs := make(chan os.Signal, 1)
