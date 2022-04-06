@@ -62,18 +62,16 @@ func websocketClient() {
 			case json.Unmarshal(message, &offer) == nil && offer.SDP != "" && offer.Type == webrtc.SDPTypeOffer:
 				log.Println("Received offer")
 				codecs := Config.coGe("H264_AAC")
-				answer, err := muxerWebRTC.WriteHeader(codecs, offer.SDP)
-
-				muxerWebRTC.pc.OnICECandidate(func(c *webrtc.ICECandidate) {
-					log.Println("Generated ICE Candidate")
+				answer, err, _ := muxerWebRTC.WriteHeader(codecs, offer.SDP, func(c *webrtc.ICECandidate) {
+					log.Println("Generated Candidate")
 					if c == nil {
 						return
 					}
-					outbound, marshalErr := json.Marshal(c.ToJSON())
+					o, marshalErr := json.Marshal(c.ToJSON())
 					if marshalErr != nil {
 						panic(marshalErr)
 					}
-					if err = ws.WriteMessage(websocket.TextMessage, outbound); err != nil {
+					if err = ws.WriteMessage(websocket.TextMessage, o); err != nil {
 						panic(err)
 					}
 				})
@@ -89,6 +87,7 @@ func websocketClient() {
 				if marshalErr != nil {
 					panic(marshalErr)
 				}
+				log.Println("Sent Answer")
 				if err = ws.WriteMessage(websocket.TextMessage, outbound); err != nil {
 					panic(err)
 				}
@@ -120,7 +119,7 @@ func websocketClient() {
 				}()
 
 			case json.Unmarshal(message, &candidate) == nil && candidate.Candidate != "":
-				log.Println(candidate)
+				log.Println("Received Candidate ", candidate)
 				if err = muxerWebRTC.pc.AddICECandidate(candidate); err != nil {
 					panic(err)
 				}

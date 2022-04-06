@@ -21,10 +21,12 @@ const startListening = (iensoWssToken) => {
     }
     socket.onopen = async () => {
         console.log('connected to ienso websocket...');
-         connections["sessionId"] = new RTCPeerConnection({
-             iceServers: [{
-                 urls: ["stun:stun.l.google.com:19302"]
-             }]
+        connections["sessionId"] = new RTCPeerConnection({
+            iceServers: [{
+                urls: ["stun:stun.ienso-dev.com:3478"]
+            }],
+            "iceTransportPolicy": "all",
+            "iceCandidatePoolSize": "0"
         })
         const pc = connections["sessionId"];
         pc.addTransceiver("video", {
@@ -47,14 +49,13 @@ const startListening = (iensoWssToken) => {
         }
         pc.onicecandidate = ({candidate}) => {
             if (candidate) {
-                  console.log("Generated ICE Candidate", candidate);
-                  socket.send(JSON.stringify(candidate));
+                console.log("Generated ICE Candidate", candidate);
+                socket.send(JSON.stringify(candidate));
             }
         }
     }
 
 }
-
 
 
 const handleSignalingOffer = async (sessionId, offer) => {
@@ -66,7 +67,7 @@ const handleSignalingOffer = async (sessionId, offer) => {
     }
     await pc.setRemoteDescription(decodedOffer);
 
-return;
+    return;
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     const encodedAnswer = {
@@ -77,6 +78,8 @@ return;
     socket.send(JSON.stringify(encodedAnswer));
 }
 
+let candidateCache = [];
+let didGetAnswer = false;
 const handleSignalingAnswer = async (sessionId, answer) => {
 
     const pc = connections[sessionId]
@@ -84,22 +87,28 @@ const handleSignalingAnswer = async (sessionId, answer) => {
         type: answer.type,
         sdp: window.atob(answer.sdp)
     })
+    console.log("setRemoteDescription(decodedAnswer)")
     await pc.setRemoteDescription(decodedAnswer);
+    didGetAnswer = true;
+    candidateCache.forEach(candidate => pc.addIceCandidate(candidate));
+    candidateCache = [];
 }
 
 const handleSignalingCandidate = async (sessionId, candidate) => {
-    return;
     const pc = connections[sessionId]
-    pc.addIceCandidate(candidate);
+    if (didGetAnswer) {
+        pc.addIceCandidate(candidate);
+    } else {
+        candidateCache.push(candidate);
+    }
 }
 
 const handleSignalingMessage = async (message, socket) => {
-    const data  = JSON.parse(message.data);
+    const data = JSON.parse(message.data);
     const {type, payload} = data;
 
-
     const sessionId = "sessionId";
-    if (type === "answer" ) {
+    if (type === "answer") {
         handleSignalingAnswer(sessionId, {
             type,
             sdp: payload,
@@ -108,12 +117,12 @@ const handleSignalingMessage = async (message, socket) => {
     }
 
 
-    if (message.data.candidate !== "") {
+    if (data.candidate) {
         handleSignalingCandidate(sessionId, data)
         return;
     }
 
-    console.log("Unknown Message", message);
+    console.log("Unknown Message", data);
     // if (payload.type === "offer" ) {
     //     handleSignalingOffer(sessionId, payload)
     //     return;

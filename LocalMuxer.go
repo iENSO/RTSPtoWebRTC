@@ -86,14 +86,18 @@ func (element *LMuxer) NewPeerConnection(configuration webrtc.Configuration) (*w
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(i), webrtc.WithSettingEngine(s))
 	return api.NewPeerConnection(configuration)
 }
-func (element *LMuxer) WriteHeader(streams []av.CodecData, sdp64 string) (string, error) {
+
+type HandlerFunc func(*webrtc.ICECandidate)
+type HandlerAnswer func(webrtc.SessionDescription)
+
+func (element *LMuxer) WriteHeader(streams []av.CodecData, sdp64 string, onIceCandidateHandle HandlerFunc) (string, error, *webrtc.PeerConnection) {
 	var WriteHeaderSuccess bool
 	if len(streams) == 0 {
-		return "", ErrorNotFound
+		return "", ErrorNotFound, nil
 	}
 	sdpB, err := base64.StdEncoding.DecodeString(sdp64)
 	if err != nil {
-		return "", err
+		return "", err, nil
 	}
 	offer := webrtc.SessionDescription{
 		Type: webrtc.SDPTypeOffer,
@@ -103,8 +107,9 @@ func (element *LMuxer) WriteHeader(streams []av.CodecData, sdp64 string) (string
 		SDPSemantics: webrtc.SDPSemanticsUnifiedPlanWithFallback,
 	})
 	if err != nil {
-		return "", err
+		return "", err, nil
 	}
+
 	defer func() {
 		if !WriteHeaderSuccess {
 			err = element.Close()
@@ -121,10 +126,10 @@ func (element *LMuxer) WriteHeader(streams []av.CodecData, sdp64 string) (string
 					MimeType: "video/h264",
 				}, "pion-rtsp-video", "pion-rtsp-video")
 				if err != nil {
-					return "", err
+					return "", err, nil
 				}
 				if _, err = peerConnection.AddTrack(track); err != nil {
-					return "", err
+					return "", err, nil
 				}
 			}
 		} else if i2.Type().IsAudio() {
@@ -146,17 +151,19 @@ func (element *LMuxer) WriteHeader(streams []av.CodecData, sdp64 string) (string
 				ClockRate: uint32(i2.(av.AudioCodecData).SampleRate()),
 			}, "pion-rtsp-audio", "pion-rtsp-audio")
 			if err != nil {
-				return "", err
+				return "", err, nil
 			}
 			if _, err = peerConnection.AddTrack(track); err != nil {
-				return "", err
+				return "", err, nil
 			}
 		}
 		element.streams[int8(i)] = &Stream{track: track, codec: i2}
 	}
 	if len(element.streams) == 0 {
-		return "", ErrorNotTrackAvailable
+		return "", ErrorNotTrackAvailable, nil
 	}
+	peerConnection.OnICECandidate(onIceCandidateHandle)
+
 	peerConnection.OnICEConnectionStateChange(func(connectionState webrtc.ICEConnectionState) {
 		element.status = connectionState
 		if connectionState == webrtc.ICEConnectionStateDisconnected {
@@ -170,28 +177,20 @@ func (element *LMuxer) WriteHeader(streams []av.CodecData, sdp64 string) (string
 	})
 
 	if err = peerConnection.SetRemoteDescription(offer); err != nil {
-		return "", err
+		return "", err, nil
 	}
-	gatherCompletePromise := webrtc.GatheringCompletePromise(peerConnection)
+
 	answer, err := peerConnection.CreateAnswer(nil)
 	if err != nil {
-		return "", err
+		return "", err, nil
 	}
 	if err = peerConnection.SetLocalDescription(answer); err != nil {
-		return "", err
+		return "", err, nil
 	}
 	element.pc = peerConnection
-	waitT := time.NewTimer(time.Second * 10)
-	select {
-	case <-waitT.C:
-		return "", errors.New("gatherCompletePromise wait")
-	case <-gatherCompletePromise:
-		//Connected
-	}
 	resp := peerConnection.LocalDescription()
 	WriteHeaderSuccess = true
-	return base64.StdEncoding.EncodeToString([]byte(resp.SDP)), nil
-
+	return base64.StdEncoding.EncodeToString([]byte(resp.SDP)), nil, peerConnection
 }
 
 func (element *LMuxer) WritePacket(pkt av.Packet) (err error) {
