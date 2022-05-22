@@ -130,7 +130,10 @@ func (element *ConfigST) GetWebRTCPortMax() uint16 {
 
 func loadConfig() *ConfigST {
 	var tmp ConfigST
-	data, err := ioutil.ReadFile("config.json")
+	data, err := ioutil.ReadFile("/tmp/config.json")
+    if err != nil {
+        data, err = ioutil.ReadFile("config.json")
+    }
 	if err == nil {
 		err = json.Unmarshal(data, &tmp)
 		if err != nil {

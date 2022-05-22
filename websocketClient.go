@@ -28,13 +28,15 @@ type ResponseAnswerStruct struct {
 func websocketClient() {
 
 	var clientUrl = Config.GetWSClientUrl()
+    log.Printf("signaling ws: %v", clientUrl)
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
 	ws, _, err := websocket.DefaultDialer.Dial(clientUrl, nil)
 	if err != nil {
-		log.Fatal("dial:", err)
+		log.Println("dial:", err)
+        return
 	}
 	defer ws.Close()
 	muxerWebRTC := NewLMuxer(Options{ICEServers: Config.GetICEServers(), ICEUsername: Config.GetICEUsername(), ICECredential: Config.GetICECredential(), PortMin: Config.GetWebRTCPortMin(), PortMax: Config.GetWebRTCPortMax()})
