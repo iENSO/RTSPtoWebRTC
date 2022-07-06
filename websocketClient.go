@@ -6,6 +6,7 @@ package main
 
 import (
 	"encoding/json"
+
 	"github.com/gorilla/websocket"
 	webrtc "github.com/pion/webrtc/v3"
 
@@ -26,9 +27,9 @@ type ResponseAnswerStruct struct {
 }
 
 func websocketClient() {
-
+	var isWSopen = true
 	var clientUrl = Config.GetWSClientUrl()
-    log.Printf("signaling ws: %v", clientUrl)
+	log.Printf("signaling ws: %v", clientUrl)
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
@@ -36,9 +37,14 @@ func websocketClient() {
 	ws, _, err := websocket.DefaultDialer.Dial(clientUrl, nil)
 	if err != nil {
 		log.Println("dial:", err)
-        return
+		return
 	}
 	defer ws.Close()
+	ws.SetCloseHandler(func(code int, text string) error {
+		log.Println("Set ws connection status to closed")
+		isWSopen = false
+		return nil
+	})
 	muxerWebRTC := NewLMuxer(Options{ICEServers: Config.GetICEServers(), ICEUsername: Config.GetICEUsername(), ICECredential: Config.GetICECredential(), PortMin: Config.GetWebRTCPortMin(), PortMax: Config.GetWebRTCPortMax()})
 	done := make(chan struct{})
 
@@ -65,6 +71,11 @@ func websocketClient() {
 				log.Println("Received offer")
 				codecs := Config.coGe("H264_AAC")
 				answer, err, _ := muxerWebRTC.WriteHeader(codecs, offer.SDP, func(c *webrtc.ICECandidate) {
+					if !isWSopen {
+						log.Println("Generated candidate but connection is closed!")
+						return
+					}
+
 					log.Println("Generated Candidate")
 					if c == nil {
 						return
@@ -73,8 +84,11 @@ func websocketClient() {
 					if marshalErr != nil {
 						panic(marshalErr)
 					}
+
 					if err = ws.WriteMessage(websocket.TextMessage, o); err != nil {
-						panic(err)
+						log.Println("Could not send candidate!")
+						//panic(err)
+						return
 					}
 				})
 
