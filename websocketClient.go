@@ -6,6 +6,7 @@ package main
 
 import (
 	"encoding/json"
+	"sync"
 
 	"github.com/gorilla/websocket"
 	webrtc "github.com/pion/webrtc/v3"
@@ -24,6 +25,17 @@ import (
 type ResponseAnswerStruct struct {
 	Type    string `json:"type"`
 	Payload string `json:"payload"`
+}
+
+type Connection struct {
+	Socket *websocket.Conn
+	mu     sync.Mutex
+}
+
+func (c *Connection) SendMessage(messageType int, data []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.Socket.WriteMessage(messageType, data)
 }
 
 func websocketClient() {
@@ -45,6 +57,10 @@ func websocketClient() {
 		isWSopen = false
 		return nil
 	})
+
+	var con = Connection{
+		Socket: ws,
+	}
 	muxerWebRTC := NewLMuxer(Options{ICEServers: Config.GetICEServers(), ICEUsername: Config.GetICEUsername(), ICECredential: Config.GetICECredential(), PortMin: Config.GetWebRTCPortMin(), PortMax: Config.GetWebRTCPortMax()})
 	done := make(chan struct{})
 
@@ -85,7 +101,7 @@ func websocketClient() {
 						panic(marshalErr)
 					}
 
-					if err = ws.WriteMessage(websocket.TextMessage, o); err != nil {
+					if err = con.SendMessage(websocket.TextMessage, o); err != nil {
 						log.Println("Could not send candidate!")
 						//panic(err)
 						return
